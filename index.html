@@ -3,130 +3,77 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TinyLLaMA Chatbot (50MB)</title>
+    <title>Lightweight Chatbot</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            max-width: 800px;
-            margin: 0 auto;
-            padding: 20px;
-        }
-        #chatbox {
-            border: 1px solid #ccc;
-            height: 400px;
-            overflow-y: scroll;
-            padding: 10px;
-            margin-bottom: 10px;
-        }
-        #userInput {
-            width: 70%;
-            padding: 8px;
-        }
-        button {
-            padding: 8px 15px;
-        }
-        #loading {
-            margin: 20px 0;
-            text-align: center;
-        }
-        #progressBar {
-            width: 100%;
-            background-color: #f3f3f3;
-            border-radius: 5px;
-        }
-        #progressBarFill {
-            height: 20px;
-            border-radius: 5px;
-            background-color: #4CAF50;
-            width: 0%;
-            transition: width 0.3s;
-        }
+        body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
+        #chatbox { border: 1px solid #ccc; height: 400px; overflow-y: scroll; padding: 10px; margin-bottom: 10px; }
+        #userInput { width: 70%; padding: 8px; }
+        button { padding: 8px 15px; }
+        #loading { margin: 20px 0; }
+        #progressBar { width: 100%; background-color: #f3f3f3; border-radius: 5px; }
+        #progressBarFill { height: 20px; border-radius: 5px; background-color: #4CAF50; width: 0%; transition: width 0.3s; }
     </style>
 </head>
 <body>
-    <h1>TinyLLaMA Chatbot (100M, 50MB)</h1>
+    <h1>DistilGPT-2 Chatbot (~50MB)</h1>
     <div id="loading">
         <p>Downloading model... (this may take 20-30 seconds)</p>
-        <div id="progressBar">
-            <div id="progressBarFill"></div>
-        </div>
+        <div id="progressBar"><div id="progressBarFill"></div></div>
         <p id="progressText">0% loaded</p>
     </div>
     <div id="chatbox" style="display: none;"></div>
     <input type="text" id="userInput" placeholder="Type your message..." disabled>
     <button onclick="generateResponse()" disabled id="sendButton">Send</button>
 
-    <!-- Load Transformers.js from CDN -->
     <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.4.0"></script>
-    
     <script>
         let pipeline;
-        const chatbox = document.getElementById('chatbox');
-        const userInput = document.getElementById('userInput');
-        const sendButton = document.getElementById('sendButton');
-        const progressBarFill = document.getElementById('progressBarFill');
-        const progressText = document.getElementById('progressText');
-        const loadingDiv = document.getElementById('loading');
+        const progressCallback = (progress) => {
+            const percent = Math.round(progress * 100);
+            document.getElementById('progressBarFill').style.width = `${percent}%`;
+            document.getElementById('progressText').textContent = `${percent}% loaded`;
+        };
 
-        // Load model with progress tracking
         async function loadModel() {
-            // Initialize progress callback
-            const progressCallback = (progress) => {
-                const percent = Math.round(progress * 100);
-                progressBarFill.style.width = `${percent}%`;
-                progressText.textContent = `${percent}% loaded`;
-            };
-
             try {
-                // Load TinyLLaMA (~50MB) with progress tracking
                 pipeline = await transformers.pipeline(
                     'text-generation',
-                    'Xenova/TinyLLama-1.1B-Chat-v1.0', // Replace with correct model
-                    { 
-                        quantized: true,
-                        progress_callback: progressCallback 
-                    }
+                    'Xenova/distilgpt2',  // Smaller, more reliable model
+                    { quantized: true, progress_callback: progressCallback }
                 );
-
-                // Hide loading, show chat
-                loadingDiv.style.display = 'none';
-                chatbox.style.display = 'block';
-                userInput.disabled = false;
-                sendButton.disabled = false;
-                chatbox.innerHTML += "<p>Model loaded! Ask me anything.</p>";
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('chatbox').style.display = 'block';
+                document.getElementById('userInput').disabled = false;
+                document.getElementById('sendButton').disabled = false;
+                document.getElementById('chatbox').innerHTML += "<p>Model loaded! Ask me anything.</p>";
             } catch (error) {
-                console.error("Error loading model:", error);
-                progressText.textContent = "Failed to load model. Check console.";
+                document.getElementById('progressText').textContent = `Error: ${error.message}`;
+                console.error(error);
             }
         }
 
-        // Generate response when user sends a message
         async function generateResponse() {
-            const inputText = userInput.value.trim();
-            if (!inputText) return;
+            const input = document.getElementById('userInput').value.trim();
+            if (!input) return;
 
-            chatbox.innerHTML += `<p><strong>You:</strong> ${inputText}</p>`;
-            userInput.value = '';
-            userInput.disabled = true;
-            sendButton.disabled = true;
+            const chatbox = document.getElementById('chatbox');
+            chatbox.innerHTML += `<p><strong>You:</strong> ${input}</p>`;
+            document.getElementById('userInput').value = '';
+            document.getElementById('userInput').disabled = true;
+            document.getElementById('sendButton').disabled = true;
 
-            // Generate response (adjust settings for speed/quality)
             try {
-                const response = await pipeline(inputText, {
-                    max_length: 100,
-                    temperature: 0.7,
-                });
-                chatbox.innerHTML += `<p><strong>Bot:</strong> ${response[0].generated_text}</p>`;
+                const response = await pipeline(input, { max_length: 50, temperature: 0.7 });
+                chatbox.innerHTML += `<p><strong>Bot:</strong> ${response[0].generated_text.replace(input, '')}</p>`;
             } catch (error) {
                 chatbox.innerHTML += `<p><strong>Error:</strong> ${error.message}</p>`;
             }
 
-            userInput.disabled = false;
-            sendButton.disabled = false;
+            document.getElementById('userInput').disabled = false;
+            document.getElementById('sendButton').disabled = false;
             chatbox.scrollTop = chatbox.scrollHeight;
         }
 
-        // Start loading when page loads
         window.onload = loadModel;
     </script>
 </body>
