@@ -26,18 +26,44 @@
     <input type="text" id="userInput" placeholder="Type your message..." disabled>
     <button onclick="generateResponse()" disabled id="sendButton">Send</button>
 
-    <!-- Load Transformers.js with a fallback -->
+    <!-- Load Transformers.js from CDN with fallback -->
     <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.4.0/dist/transformers.min.js"></script>
     <script>
-        // Wait for Transformers.js to load
-        function checkTransformersLoaded() {
+        // Global error handler
+        window.addEventListener('error', (event) => {
+            if (event.message.includes('transformers')) {
+                showError('Failed to load AI engine. Please refresh or try later.');
+            }
+        });
+
+        function showError(msg) {
+            document.getElementById('progressText').innerHTML = 
+                `<span class="error">${msg}</span>`;
+            console.error(msg);
+        }
+
+        // Check if Transformers.js loaded successfully
+        function isTransformersReady() {
             if (typeof window.transformers === 'undefined') {
-                document.getElementById('progressText').innerHTML = 
-                    '<span class="error">Error: Transformers.js failed to load. Refresh or check network.</span>';
-                console.error("Transformers.js not loaded!");
+                showError('AI engine not loaded. Trying backup...');
+                loadBackupScript();
                 return false;
             }
             return true;
+        }
+
+        // Backup CDN in case primary fails
+        function loadBackupScript() {
+            const backupScript = document.createElement('script');
+            backupScript.src = 'https://unpkg.com/@xenova/transformers@2.4.0/dist/transformers.min.js';
+            backupScript.onload = () => {
+                if (typeof window.transformers !== 'undefined') {
+                    showError('Backup loaded! Starting model...');
+                    loadModel();
+                }
+            };
+            backupScript.onerror = () => showError('All CDNs failed. Check internet connection.');
+            document.head.appendChild(backupScript);
         }
 
         let pipeline;
@@ -48,13 +74,16 @@
         };
 
         async function loadModel() {
-            if (!checkTransformersLoaded()) return;
+            if (!isTransformersReady()) return;
 
             try {
                 pipeline = await window.transformers.pipeline(
                     'text-generation',
                     'Xenova/distilgpt2',
-                    { quantized: true, progress_callback: progressCallback }
+                    { 
+                        quantized: true,
+                        progress_callback: progressCallback
+                    }
                 );
                 document.getElementById('loading').style.display = 'none';
                 document.getElementById('chatbox').style.display = 'block';
@@ -62,9 +91,7 @@
                 document.getElementById('sendButton').disabled = false;
                 document.getElementById('chatbox').innerHTML += "<p>Model loaded! Ask me anything.</p>";
             } catch (error) {
-                document.getElementById('progressText').innerHTML = 
-                    `<span class="error">Error: ${error.message}</span>`;
-                console.error(error);
+                showError(`Model error: ${error.message}`);
             }
         }
 
@@ -79,7 +106,10 @@
             document.getElementById('sendButton').disabled = true;
 
             try {
-                const response = await pipeline(input, { max_length: 50, temperature: 0.7 });
+                const response = await pipeline(input, { 
+                    max_length: 50, 
+                    temperature: 0.7 
+                });
                 chatbox.innerHTML += `<p><strong>Bot:</strong> ${response[0].generated_text.replace(input, '')}</p>`;
             } catch (error) {
                 chatbox.innerHTML += `<p><strong>Error:</strong> ${error.message}</p>`;
@@ -90,9 +120,9 @@
             chatbox.scrollTop = chatbox.scrollHeight;
         }
 
-        // Start loading after confirming Transformers.js is ready
+        // Start loading
         document.addEventListener('DOMContentLoaded', () => {
-            if (checkTransformersLoaded()) {
+            if (isTransformersReady()) {
                 loadModel();
             }
         });
