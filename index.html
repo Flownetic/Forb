@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Lightweight Chatbot</title>
+    <title>DistilGPT-2 Chatbot</title>
     <style>
         body { font-family: Arial, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; }
         #chatbox { border: 1px solid #ccc; height: 400px; overflow-y: scroll; padding: 10px; margin-bottom: 10px; }
@@ -12,6 +12,7 @@
         #loading { margin: 20px 0; }
         #progressBar { width: 100%; background-color: #f3f3f3; border-radius: 5px; }
         #progressBarFill { height: 20px; border-radius: 5px; background-color: #4CAF50; width: 0%; transition: width 0.3s; }
+        .error { color: red; }
     </style>
 </head>
 <body>
@@ -25,8 +26,20 @@
     <input type="text" id="userInput" placeholder="Type your message..." disabled>
     <button onclick="generateResponse()" disabled id="sendButton">Send</button>
 
-    <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.4.0"></script>
+    <!-- Load Transformers.js with a fallback -->
+    <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.4.0/dist/transformers.min.js"></script>
     <script>
+        // Wait for Transformers.js to load
+        function checkTransformersLoaded() {
+            if (typeof window.transformers === 'undefined') {
+                document.getElementById('progressText').innerHTML = 
+                    '<span class="error">Error: Transformers.js failed to load. Refresh or check network.</span>';
+                console.error("Transformers.js not loaded!");
+                return false;
+            }
+            return true;
+        }
+
         let pipeline;
         const progressCallback = (progress) => {
             const percent = Math.round(progress * 100);
@@ -35,10 +48,12 @@
         };
 
         async function loadModel() {
+            if (!checkTransformersLoaded()) return;
+
             try {
-                pipeline = await transformers.pipeline(
+                pipeline = await window.transformers.pipeline(
                     'text-generation',
-                    'Xenova/distilgpt2',  // Smaller, more reliable model
+                    'Xenova/distilgpt2',
                     { quantized: true, progress_callback: progressCallback }
                 );
                 document.getElementById('loading').style.display = 'none';
@@ -47,7 +62,8 @@
                 document.getElementById('sendButton').disabled = false;
                 document.getElementById('chatbox').innerHTML += "<p>Model loaded! Ask me anything.</p>";
             } catch (error) {
-                document.getElementById('progressText').textContent = `Error: ${error.message}`;
+                document.getElementById('progressText').innerHTML = 
+                    `<span class="error">Error: ${error.message}</span>`;
                 console.error(error);
             }
         }
@@ -74,7 +90,12 @@
             chatbox.scrollTop = chatbox.scrollHeight;
         }
 
-        window.onload = loadModel;
+        // Start loading after confirming Transformers.js is ready
+        document.addEventListener('DOMContentLoaded', () => {
+            if (checkTransformersLoaded()) {
+                loadModel();
+            }
+        });
     </script>
 </body>
 </html>
