@@ -66,14 +66,22 @@
     .input-container button:hover {
       background: #0056b3;
     }
+    /* Loading bar */
+    #loading-bar {
+      height: 6px;
+      background: #007bff;
+      width: 0%;
+      transition: width 0.2s;
+    }
   </style>
 </head>
 <body>
   <div class="chat-container">
+    <div id="loading-bar"></div>
     <div id="chat-box" class="chat-box"></div>
     <div class="input-container">
-      <input id="user-input" type="text" placeholder="Type a message...">
-      <button onclick="sendMessage()">Send</button>
+      <input id="user-input" type="text" placeholder="Type a message..." disabled>
+      <button onclick="sendMessage()" disabled id="send-btn">Send</button>
     </div>
   </div>
 
@@ -83,12 +91,24 @@
     let pipeline;
 
     async function loadModel() {
-      appendMessage("bot", "⏳ Loading AI model, please wait...");
+      appendMessage("bot", "⏳ Loading AI model... Please wait.");
+
       pipeline = await window.transformers.pipeline(
         "text-generation",
-        "Xenova/distilgpt2"   // Free small model
+        "Xenova/distilgpt2",
+        {
+          progress_callback: (progress) => {
+            if (progress && progress.loaded && progress.total) {
+              const percent = Math.round((progress.loaded / progress.total) * 100);
+              document.getElementById("loading-bar").style.width = percent + "%";
+            }
+          }
+        }
       );
-      document.getElementById("chat-box").lastChild.textContent = "✅ Model loaded! You can chat now.";
+
+      appendMessage("bot", "✅ Model loaded! You can chat now.");
+      document.getElementById("user-input").disabled = false;
+      document.getElementById("send-btn").disabled = false;
     }
 
     loadModel();
@@ -103,7 +123,6 @@
 
       appendMessage("bot", "🤔 Thinking...");
 
-      // Run local generation
       const output = await pipeline(message, {
         max_new_tokens: 40,
         do_sample: true,
@@ -125,4 +144,4 @@
     }
   </script>
 </body>
-</html>    
+</html>
