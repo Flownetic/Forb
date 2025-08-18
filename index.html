@@ -1,170 +1,133 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <title>Local Chatbot (Transformers.js)</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f0f2f5;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 100vh;
-      margin: 0;
-    }
-    .chat-container {
-      width: 450px;
-      height: 600px;
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 6px 16px rgba(0,0,0,0.1);
-      display: flex;
-      flex-direction: column;
-    }
-    .chat-box {
-      flex: 1;
-      padding: 15px;
-      overflow-y: auto;
-      border-bottom: 1px solid #ddd;
-    }
-    .message {
-      margin: 10px 0;
-      padding: 10px 14px;
-      border-radius: 10px;
-      max-width: 80%;
-      word-wrap: break-word;
-    }
-    .user {
-      background: #007bff;
-      color: white;
-      align-self: flex-end;
-    }
-    .bot {
-      background: #e6e6e6;
-      color: #222;
-      align-self: flex-start;
-    }
-    .input-container {
-      display: flex;
-      border-top: 1px solid #ddd;
-    }
-    .input-container input {
-      flex: 1;
-      border: none;
-      padding: 12px;
-      font-size: 14px;
-    }
-    .input-container button {
-      background: #007bff;
-      border: none;
-      color: white;
-      padding: 12px 18px;
-      font-size: 14px;
-      cursor: pointer;
-    }
-    .input-container button:hover {
-      background: #0056b3;
-    }
-    /* Loading bar */
-    #loading-container {
-      height: 30px;
-      display: flex;
-      align-items: center;
-      padding: 5px;
-      background: #f8f8f8;
-      border-bottom: 1px solid #ddd;
-    }
-    #loading-bar {
-      height: 8px;
-      background: #007bff;
-      width: 0%;
-      transition: width 0.2s;
-      border-radius: 5px;
-    }
-    #loading-text {
-      margin-left: 10px;
-      font-size: 13px;
-      color: #333;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TinyLLaMA Chatbot (50MB)</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        #chatbox {
+            border: 1px solid #ccc;
+            height: 400px;
+            overflow-y: scroll;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        #userInput {
+            width: 70%;
+            padding: 8px;
+        }
+        button {
+            padding: 8px 15px;
+        }
+        #loading {
+            margin: 20px 0;
+            text-align: center;
+        }
+        #progressBar {
+            width: 100%;
+            background-color: #f3f3f3;
+            border-radius: 5px;
+        }
+        #progressBarFill {
+            height: 20px;
+            border-radius: 5px;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
+        }
+    </style>
 </head>
 <body>
-  <div class="chat-container">
-    <div id="loading-container">
-      <div style="flex:1; background:#ddd; border-radius:5px; overflow:hidden;">
-        <div id="loading-bar"></div>
-      </div>
-      <div id="loading-text">0%</div>
+    <h1>TinyLLaMA Chatbot (100M, 50MB)</h1>
+    <div id="loading">
+        <p>Downloading model... (this may take 20-30 seconds)</p>
+        <div id="progressBar">
+            <div id="progressBarFill"></div>
+        </div>
+        <p id="progressText">0% loaded</p>
     </div>
-    <div id="chat-box" class="chat-box"></div>
-    <div class="input-container">
-      <input id="user-input" type="text" placeholder="Type a message..." disabled>
-      <button onclick="sendMessage()" disabled id="send-btn">Send</button>
-    </div>
-  </div>
+    <div id="chatbox" style="display: none;"></div>
+    <input type="text" id="userInput" placeholder="Type your message..." disabled>
+    <button onclick="generateResponse()" disabled id="sendButton">Send</button>
 
-  <!-- Load Transformers.js -->
-  <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.5.1/dist/transformers.min.js"></script>
-  <script>
-    let pipeline;
+    <!-- Load Transformers.js from CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.4.0"></script>
+    
+    <script>
+        let pipeline;
+        const chatbox = document.getElementById('chatbox');
+        const userInput = document.getElementById('userInput');
+        const sendButton = document.getElementById('sendButton');
+        const progressBarFill = document.getElementById('progressBarFill');
+        const progressText = document.getElementById('progressText');
+        const loadingDiv = document.getElementById('loading');
 
-    async function loadModel() {
-      appendMessage("bot", "⏳ Loading AI model... Please wait.");
+        // Load model with progress tracking
+        async function loadModel() {
+            // Initialize progress callback
+            const progressCallback = (progress) => {
+                const percent = Math.round(progress * 100);
+                progressBarFill.style.width = `${percent}%`;
+                progressText.textContent = `${percent}% loaded`;
+            };
 
-      pipeline = await window.transformers.pipeline(
-        "text-generation",
-        "Xenova/distilgpt2",
-        {
-          progress_callback: (progress) => {
-            if (progress && typeof progress.progress === "number") {
-              const percent = Math.round(progress.progress * 100);
-              document.getElementById("loading-bar").style.width = percent + "%";
-              document.getElementById("loading-text").textContent = percent + "%";
+            try {
+                // Load TinyLLaMA (~50MB) with progress tracking
+                pipeline = await transformers.pipeline(
+                    'text-generation',
+                    'Xenova/TinyLLama-1.1B-Chat-v1.0', // Replace with correct model
+                    { 
+                        quantized: true,
+                        progress_callback: progressCallback 
+                    }
+                );
+
+                // Hide loading, show chat
+                loadingDiv.style.display = 'none';
+                chatbox.style.display = 'block';
+                userInput.disabled = false;
+                sendButton.disabled = false;
+                chatbox.innerHTML += "<p>Model loaded! Ask me anything.</p>";
+            } catch (error) {
+                console.error("Error loading model:", error);
+                progressText.textContent = "Failed to load model. Check console.";
             }
-          }
         }
-      );
 
-      appendMessage("bot", "✅ Model loaded! You can chat now.");
-      document.getElementById("user-input").disabled = false;
-      document.getElementById("send-btn").disabled = false;
+        // Generate response when user sends a message
+        async function generateResponse() {
+            const inputText = userInput.value.trim();
+            if (!inputText) return;
 
-      // hide loading bar once loaded
-      document.getElementById("loading-container").style.display = "none";
-    }
+            chatbox.innerHTML += `<p><strong>You:</strong> ${inputText}</p>`;
+            userInput.value = '';
+            userInput.disabled = true;
+            sendButton.disabled = true;
 
-    loadModel();
+            // Generate response (adjust settings for speed/quality)
+            try {
+                const response = await pipeline(inputText, {
+                    max_length: 100,
+                    temperature: 0.7,
+                });
+                chatbox.innerHTML += `<p><strong>Bot:</strong> ${response[0].generated_text}</p>`;
+            } catch (error) {
+                chatbox.innerHTML += `<p><strong>Error:</strong> ${error.message}</p>`;
+            }
 
-    async function sendMessage() {
-      const inputField = document.getElementById("user-input");
-      const message = inputField.value.trim();
-      if (!message || !pipeline) return;
+            userInput.disabled = false;
+            sendButton.disabled = false;
+            chatbox.scrollTop = chatbox.scrollHeight;
+        }
 
-      appendMessage("user", message);
-      inputField.value = "";
-
-      appendMessage("bot", "🤔 Thinking...");
-
-      const output = await pipeline(message, {
-        max_new_tokens: 40,
-        do_sample: true,
-        top_k: 50,
-        temperature: 0.7
-      });
-
-      // Replace last "Thinking..." message
-      document.getElementById("chat-box").lastChild.textContent = output[0].generated_text;
-    }
-
-    function appendMessage(sender, text) {
-      const chatBox = document.getElementById("chat-box");
-      const msgEl = document.createElement("div");
-      msgEl.className = `message ${sender}`;
-      msgEl.textContent = text;
-      chatBox.appendChild(msgEl);
-      chatBox.scrollTop = chatBox.scrollHeight;
-    }
-  </script>
+        // Start loading when page loads
+        window.onload = loadModel;
+    </script>
 </body>
 </html>
