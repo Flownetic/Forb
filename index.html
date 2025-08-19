@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>On-device Chat (WASM, no WebGPU)</title>
+  <title>Local Chat — WASM (no WebGPU)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
     :root {
@@ -13,18 +13,17 @@
       --muted: #a6b0c3;
       --accent: #7aa2ff;
       --accent-2: #5ef1c1;
-      --danger: #ff6b6b;
       --radius: 18px;
     }
     * { box-sizing: border-box; }
     body {
       margin:0; background: radial-gradient(1200px 600px at 10% -10%, #122033 0%, #0b0f14 50%, #090c11 100%);
-      color: var(--text); font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+      color: var(--text); font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, Inter, "Helvetica Neue", Arial, "Noto Sans";
       min-height: 100vh; display:flex; align-items:center; justify-content:center; padding: 28px;
     }
     .app {
       width: min(1100px, 100%); display:grid; gap:16px;
-      grid-template-rows: auto 1fr auto;
+      grid-template-rows: auto auto 1fr auto;
       background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.04));
       border: 1px solid rgba(255,255,255,0.06);
       backdrop-filter: blur(10px);
@@ -120,13 +119,13 @@
     </div>
 
     <div class="tiny">
-      Tech: <strong>WASM (llama.cpp via wllama)</strong> • Model: TinyMistral-248M Q8_0 (~264 MB) from Hugging Face • Caches in your browser.<br/>
-      First load takes a bit; later is instant. You can also swap in other GGUFs.
+      Tech: <strong>WASM (llama.cpp via @wllama/wllama)</strong> • Default model: TinyMistral-248M Q8_0 (~264 MB).<br/>
+      First load downloads & caches in your browser. You can swap in other GGUFs below.
     </div>
   </div>
 
   <script type="module">
-    // Import wllama from CDN (works on file:// too). No WebGPU used.
+    // Import wllama (WASM llama.cpp) from CDN — works on file:// too (no WebGPU).
     import { Wllama, LoggerWithoutDebug } from "https://cdn.jsdelivr.net/npm/@wllama/wllama@2.3.4/esm/index.js";
     import WasmFromCDN from "https://cdn.jsdelivr.net/npm/@wllama/wllama@2.3.4/esm/wasm-from-cdn.js";
 
@@ -164,17 +163,21 @@
       btnLoad.disabled = b || modelReady;
     }
 
-    // --- Model config: small model for faster loads on Android/mobile ---
+    // --- Choose model (lightweight default for Android). Swap these two lines to change model. ---
+    // Small & fast (recommended for Android): ~264 MB
     const HF_REPO = "tensorblock/TinyMistral-248M-GGUF";
-    const HF_FILE = "TinyMistral-248M-Q8_0.gguf"; // ~264 MB
-
+    const HF_FILE = "TinyMistral-248M-Q8_0.gguf";
     badgeModel.textContent = `Model: TinyMistral-248M Q8_0`;
+
+    // If you want TinyLlama 1.1B Chat instead (~669 MB, better quality but heavier), use:
+    // const HF_REPO = "TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF";
+    // const HF_FILE = "tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf";
+    // badgeModel.textContent = `Model: TinyLlama 1.1B Chat Q4_K_M`;
 
     let wllama = null;
     let modelReady = false;
-
-    // Simple chat prompt builder (TinyMistral isn’t strictly chat-format-aware; this keeps it generic)
     const history = [];
+
     function buildPrompt(userText) {
       const sys = "You are a helpful, concise assistant.";
       const turns = history.map(h => `${h.role.toUpperCase()}: ${h.text}`).join("\n");
@@ -186,33 +189,44 @@
       setBusy(true);
       setProgress(0, "Initializing…");
 
-      // Create instance; enforce single-thread for widest compatibility (no COOP/COEP needed)
+      // Create instance; single thread = widest compatibility (no COOP/COEP headers needed).
       wllama = new Wllama(WasmFromCDN, {
         logger: LoggerWithoutDebug,
-        parallelDownloads: 4, // faster chunk fetching when available
+        parallelDownloads: 4, // faster when browser allows
       });
 
-      // Track model download progress
+      // Show "low memory" hint if device is tiny
+      try {
+        if (navigator.deviceMemory && navigator.deviceMemory < 4) {
+          badgeWarn.style.display = "inline-block";
+          badgeWarn.textContent = "Low memory device";
+        }
+      } catch {}
+
       let lastPct = 0;
-      const progressCallback = ({ loaded, total, file }) => {
+      const progressCallback = ({ loaded, total, file, cached }) => {
+        if (cached) {
+          badgeCache.style.display = "inline-block";
+        }
         const p = total ? (loaded / total) * 100 : lastPct;
         lastPct = p;
-        setProgress(p, total ? `Downloading model… (${(loaded/1024/1024).toFixed(1)} / ${(total/1024/1024).toFixed(1)} MB)` : "Downloading model…");
+        const mb = v => (v/1024/1024).toFixed(1);
+        setProgress(p, total
+          ? `Downloading ${file || "model"}… (${mb(loaded)} / ${mb(total)} MB)`
+          : `Downloading…`);
       };
 
       try {
         await wllama.loadModelFromHF(HF_REPO, HF_FILE, {
-          // Force single-thread to work on file:// and non–cross-origin-isolated pages
-          n_threads: 1,
-          // If the model is already cached, wllama uses OPFS and this callback will run briefly
-          progressCallback,
+          n_threads: 1,            // important for file:// pages
+          progressCallback,        // updates % and MB
         });
         modelReady = true;
         setProgress(100, "Model loaded. Ready!");
         promptEl.disabled = false;
         btnSend.disabled = false;
         btnLoad.disabled = true;
-        badgeCache.style.display = "inline-block";
+        addMsg("✅ Model loaded. Ask me something!");
       } catch (e) {
         console.error(e);
         statusEl.textContent = "Failed to load model.";
@@ -232,17 +246,15 @@
       const botDiv = addMsg("…thinking…", "bot");
 
       try {
-        // Build a single-shot completion (no streaming API in high-level call)
         setProgress(100, "Generating…");
         const out = await wllama.createCompletion(buildPrompt(text), {
-          // Keep it light for mobile
-          nPredict: 160,
+          nPredict: 160,                        // keep light for mobile
           sampling: { temp: 0.7, top_k: 40, top_p: 0.9 },
-          // Stop when the assistant finishes a turn
-          stopTokens: ["USER:"],
+          stopTokens: ["USER:"],                // stop at next user turn
         });
-        botDiv.textContent = out.trim();
-        history.push({ role: "assistant", text: out.trim() });
+        const reply = out.trim().replace(/^ASSISTANT:\s*/i, "");
+        botDiv.textContent = reply || "(no output)";
+        history.push({ role: "assistant", text: reply });
         statusEl.textContent = "Ready.";
       } catch (e) {
         console.error(e);
@@ -252,14 +264,6 @@
       }
     }
 
-    // Memory hint badge for small devices
-    try {
-      if (navigator.deviceMemory && navigator.deviceMemory < 4) {
-        badgeWarn.style.display = "inline-block";
-        badgeWarn.textContent = "Low memory device";
-      }
-    } catch {}
-
     // Wire up UI
     btnLoad.addEventListener("click", loadModel);
     btnSend.addEventListener("click", send);
@@ -268,15 +272,11 @@
       chat.innerHTML = "";
       addMsg("🧹 Cleared. Ask me something!");
     });
-    promptEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); btnSend.click(); }
+    document.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey && !promptEl.disabled) {
+        e.preventDefault(); btnSend.click();
+      }
     });
-
-    // Optional: auto-load on desktop
-    if (!/Android|iPhone|iPad/i.test(navigator.userAgent)) {
-      // comment this out if you prefer manual loading everywhere
-      // loadModel();
-    }
   </script>
 </body>
 </html>
