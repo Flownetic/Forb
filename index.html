@@ -1,47 +1,282 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>TinyLlama Chat (CPU Mode)</title>
+  <meta charset="utf-8" />
+  <title>On-device Chat (WASM, no WebGPU)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root {
+      --bg: #0b0f14;
+      --panel: rgba(255,255,255,0.06);
+      --panel-2: rgba(255,255,255,0.08);
+      --text: #e8eef8;
+      --muted: #a6b0c3;
+      --accent: #7aa2ff;
+      --accent-2: #5ef1c1;
+      --danger: #ff6b6b;
+      --radius: 18px;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin:0; background: radial-gradient(1200px 600px at 10% -10%, #122033 0%, #0b0f14 50%, #090c11 100%);
+      color: var(--text); font: 15px/1.5 system-ui, -apple-system, Segoe UI, Roboto, "Helvetica Neue", Arial, "Noto Sans", "Apple Color Emoji","Segoe UI Emoji";
+      min-height: 100vh; display:flex; align-items:center; justify-content:center; padding: 28px;
+    }
+    .app {
+      width: min(1100px, 100%); display:grid; gap:16px;
+      grid-template-rows: auto 1fr auto;
+      background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.04));
+      border: 1px solid rgba(255,255,255,0.06);
+      backdrop-filter: blur(10px);
+      border-radius: var(--radius); padding: 18px;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.45);
+    }
+    .header { display:flex; align-items:center; gap:14px; padding: 6px 8px; }
+    .logo {
+      width:38px; height:38px; border-radius: 12px; display:grid; place-items:center;
+      background: linear-gradient(135deg, var(--accent), var(--accent-2)); color:#08121a; font-weight:800;
+      box-shadow: 0 6px 22px rgba(90,170,255,0.45);
+    }
+    .title { font-size: 18px; font-weight: 700; letter-spacing:.25px; }
+    .sub { color: var(--muted); font-size: 12px; }
+    .badges { margin-left:auto; display:flex; gap:8px; align-items:center; }
+    .chip {
+      border:1px solid rgba(255,255,255,0.14); padding:6px 10px; border-radius: 999px;
+      background: var(--panel); color: var(--muted); font-size:12px;
+    }
+    .chip.good { color:#c9ffe8; border-color: rgba(94,241,193,0.45); background: rgba(94,241,193,0.08); }
+    .chip.warn { color:#ffd4d4; border-color: rgba(255,107,107,0.45); background: rgba(255,107,107,0.08); }
+
+    .progress {
+      display:flex; align-items:center; gap:10px; padding: 10px; border-radius: 12px;
+      background: var(--panel); border:1px solid rgba(255,255,255,0.08);
+    }
+    .bar-wrap { flex:1; height: 10px; background: rgba(255,255,255,0.08); border-radius: 999px; overflow:hidden; }
+    .bar { height:100%; width:0%; background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .2s ease; }
+    .pct { width:52px; text-align:right; font-variant-numeric: tabular-nums; color: var(--muted); }
+    .status { color: var(--muted); font-size: 12px; }
+
+    .chat {
+      min-height: 420px; max-height: 60vh; overflow:auto; padding: 10px; display:flex; flex-direction:column; gap:10px;
+      background: var(--panel-2); border:1px solid rgba(255,255,255,0.08); border-radius: 14px;
+    }
+    .msg { padding: 12px 14px; border-radius: 14px; max-width: 88%; white-space: pre-wrap; word-wrap: break-word; }
+    .me   { align-self:flex-end; background: rgba(122,162,255,0.15); border:1px solid rgba(122,162,255,0.35); }
+    .bot  { align-self:flex-start; background: rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.16); }
+    .row { display:flex; gap:10px; }
+    .input {
+      flex:1; display:flex; gap:10px; align-items:flex-end; background: var(--panel); border:1px solid rgba(255,255,255,0.08);
+      border-radius: 14px; padding:10px;
+    }
+    textarea {
+      flex:1; resize:vertical; min-height:60px; max-height: 180px; background: transparent; border:0; color: var(--text);
+      outline: none; font: inherit;
+    }
+    button {
+      appearance:none; border:1px solid rgba(255,255,255,0.16); background: linear-gradient(135deg, rgba(122,162,255,0.25), rgba(94,241,193,0.20));
+      color: #ebf5ff; padding: 10px 14px; border-radius: 12px; font-weight:700; cursor:pointer;
+      transition: transform .06s ease, opacity .2s ease, box-shadow .2s ease;
+      box-shadow: 0 6px 18px rgba(122,162,255,0.25);
+    }
+    button.secondary { background: transparent; color: var(--muted);}
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    button:hover:not(:disabled) { transform: translateY(-1px); }
+    .tiny { font-size: 11px; color: var(--muted); }
+    a { color: var(--accent-2); text-decoration: none; }
+  </style>
 </head>
 <body>
-  <h2>TinyLlama Chat (WASM CPU Mode)</h2>
-  <div id="chat" style="border:1px solid #ccc; padding:10px; height:300px; overflow-y:auto;"></div>
-  <input id="userInput" type="text" placeholder="Type your message..." style="width:80%;">
-  <button onclick="sendMessage()">Send</button>
+  <div class="app">
+    <div class="header">
+      <div class="logo">LL</div>
+      <div>
+        <div class="title">Local Chat — WASM (llama.cpp)</div>
+        <div class="sub">Runs in your browser. No GPU. No Python. No server.</div>
+      </div>
+      <div class="badges">
+        <span id="badge-model" class="chip">Model: —</span>
+        <span id="badge-cache" class="chip good" style="display:none">Cached</span>
+        <span id="badge-warn" class="chip warn" style="display:none">Low memory</span>
+      </div>
+    </div>
 
-  <script src="https://huggingface.github.io/llama.cpp/web/llama.js"></script>
-  <script>
-    let model;
-    const chatBox = document.getElementById("chat");
+    <div class="progress">
+      <div class="status" id="status">Click “Load Model” to begin…</div>
+      <div class="bar-wrap"><div class="bar" id="bar"></div></div>
+      <div class="pct" id="pct">0%</div>
+      <button id="btnLoad">Load Model</button>
+    </div>
 
-    async function loadModel() {
-      chatBox.innerHTML += "<div>Loading TinyLlama... (this may take a minute)</div>";
-      model = await llama.loadModel({
-        model: "https://huggingface.co/second-state/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat.Q4_K_M.bin",
-        wasmUrl: "https://huggingface.github.io/llama.cpp/web/llama.wasm"
-      });
-      chatBox.innerHTML += "<div>✅ Model loaded! Start chatting.</div>";
+    <div class="chat" id="chat">
+      <div class="msg bot">👋 Hi! I run fully in your browser with WebAssembly. Load the model to start.</div>
+    </div>
+
+    <div class="row">
+      <div class="input">
+        <textarea id="prompt" placeholder="Ask me anything…" disabled></textarea>
+        <button id="btnSend" disabled>Send</button>
+      </div>
+      <button id="btnClear" class="secondary">Clear</button>
+    </div>
+
+    <div class="tiny">
+      Tech: <strong>WASM (llama.cpp via wllama)</strong> • Model: TinyMistral-248M Q8_0 (~264 MB) from Hugging Face • Caches in your browser.<br/>
+      First load takes a bit; later is instant. You can also swap in other GGUFs.
+    </div>
+  </div>
+
+  <script type="module">
+    // Import wllama from CDN (works on file:// too). No WebGPU used.
+    import { Wllama, LoggerWithoutDebug } from "https://cdn.jsdelivr.net/npm/@wllama/wllama@2.3.4/esm/index.js";
+    import WasmFromCDN from "https://cdn.jsdelivr.net/npm/@wllama/wllama@2.3.4/esm/wasm-from-cdn.js";
+
+    // --- UI helpers ---
+    const $ = s => document.querySelector(s);
+    const chat = $("#chat");
+    const statusEl = $("#status");
+    const bar = $("#bar");
+    const pct = $("#pct");
+    const badgeModel = $("#badge-model");
+    const badgeCache = $("#badge-cache");
+    const badgeWarn = $("#badge-warn");
+    const btnLoad = $("#btnLoad");
+    const btnSend = $("#btnSend");
+    const btnClear = $("#btnClear");
+    const promptEl = $("#prompt");
+
+    function addMsg(text, who="bot") {
+      const div = document.createElement("div");
+      div.className = `msg ${who}`;
+      div.textContent = text;
+      chat.appendChild(div);
+      chat.scrollTop = chat.scrollHeight;
+      return div;
+    }
+    function setProgress(p, label) {
+      const clamped = Math.max(0, Math.min(100, Math.round(p)));
+      bar.style.width = clamped + "%";
+      pct.textContent = clamped + "%";
+      if (label) statusEl.textContent = label;
+    }
+    function setBusy(b) {
+      btnSend.disabled = b || !modelReady;
+      promptEl.disabled = b || !modelReady;
+      btnLoad.disabled = b || modelReady;
     }
 
-    async function sendMessage() {
-      const input = document.getElementById("userInput");
-      const userMsg = input.value;
-      if (!userMsg.trim()) return;
-      chatBox.innerHTML += `<div><b>You:</b> ${userMsg}</div>`;
-      input.value = "";
+    // --- Model config: small model for faster loads on Android/mobile ---
+    const HF_REPO = "tensorblock/TinyMistral-248M-GGUF";
+    const HF_FILE = "TinyMistral-248M-Q8_0.gguf"; // ~264 MB
 
-      let reply = "";
-      for await (const chunk of model.chat(userMsg)) {
-        reply += chunk;
-        document.getElementById("chat").lastElementChild?.remove();
-        chatBox.innerHTML += `<div><b>Bot:</b> ${reply}</div>`;
-        chatBox.scrollTop = chatBox.scrollHeight;
+    badgeModel.textContent = `Model: TinyMistral-248M Q8_0`;
+
+    let wllama = null;
+    let modelReady = false;
+
+    // Simple chat prompt builder (TinyMistral isn’t strictly chat-format-aware; this keeps it generic)
+    const history = [];
+    function buildPrompt(userText) {
+      const sys = "You are a helpful, concise assistant.";
+      const turns = history.map(h => `${h.role.toUpperCase()}: ${h.text}`).join("\n");
+      return `${sys}\n${turns}${turns ? "\n" : ""}USER: ${userText}\nASSISTANT:`;
+    }
+
+    async function loadModel() {
+      if (modelReady) return;
+      setBusy(true);
+      setProgress(0, "Initializing…");
+
+      // Create instance; enforce single-thread for widest compatibility (no COOP/COEP needed)
+      wllama = new Wllama(WasmFromCDN, {
+        logger: LoggerWithoutDebug,
+        parallelDownloads: 4, // faster chunk fetching when available
+      });
+
+      // Track model download progress
+      let lastPct = 0;
+      const progressCallback = ({ loaded, total, file }) => {
+        const p = total ? (loaded / total) * 100 : lastPct;
+        lastPct = p;
+        setProgress(p, total ? `Downloading model… (${(loaded/1024/1024).toFixed(1)} / ${(total/1024/1024).toFixed(1)} MB)` : "Downloading model…");
+      };
+
+      try {
+        await wllama.loadModelFromHF(HF_REPO, HF_FILE, {
+          // Force single-thread to work on file:// and non–cross-origin-isolated pages
+          n_threads: 1,
+          // If the model is already cached, wllama uses OPFS and this callback will run briefly
+          progressCallback,
+        });
+        modelReady = true;
+        setProgress(100, "Model loaded. Ready!");
+        promptEl.disabled = false;
+        btnSend.disabled = false;
+        btnLoad.disabled = true;
+        badgeCache.style.display = "inline-block";
+      } catch (e) {
+        console.error(e);
+        statusEl.textContent = "Failed to load model.";
+        addMsg("❌ Model failed to load. Check your connection or try again.", "bot");
+      } finally {
+        setBusy(false);
       }
     }
 
-    loadModel();
+    async function send() {
+      const text = promptEl.value.trim();
+      if (!text) return;
+      history.push({ role: "user", text });
+      addMsg(text, "me");
+      promptEl.value = "";
+      setBusy(true);
+      const botDiv = addMsg("…thinking…", "bot");
+
+      try {
+        // Build a single-shot completion (no streaming API in high-level call)
+        setProgress(100, "Generating…");
+        const out = await wllama.createCompletion(buildPrompt(text), {
+          // Keep it light for mobile
+          nPredict: 160,
+          sampling: { temp: 0.7, top_k: 40, top_p: 0.9 },
+          // Stop when the assistant finishes a turn
+          stopTokens: ["USER:"],
+        });
+        botDiv.textContent = out.trim();
+        history.push({ role: "assistant", text: out.trim() });
+        statusEl.textContent = "Ready.";
+      } catch (e) {
+        console.error(e);
+        botDiv.textContent = "⚠️ Error generating a reply.";
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    // Memory hint badge for small devices
+    try {
+      if (navigator.deviceMemory && navigator.deviceMemory < 4) {
+        badgeWarn.style.display = "inline-block";
+        badgeWarn.textContent = "Low memory device";
+      }
+    } catch {}
+
+    // Wire up UI
+    btnLoad.addEventListener("click", loadModel);
+    btnSend.addEventListener("click", send);
+    btnClear.addEventListener("click", () => {
+      history.length = 0;
+      chat.innerHTML = "";
+      addMsg("🧹 Cleared. Ask me something!");
+    });
+    promptEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); btnSend.click(); }
+    });
+
+    // Optional: auto-load on desktop
+    if (!/Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      // comment this out if you prefer manual loading everywhere
+      // loadModel();
+    }
   </script>
 </body>
 </html>
