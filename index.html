@@ -338,8 +338,8 @@
                     // Start performance monitoring
                     this.performanceMonitor.startInference();
                     
-                    // Simulate response generation
-                    const response = await this.simulateInference(userText);
+                    // Generate response
+                    const response = await this.generateAIResponse(userText);
                     
                     // Add AI response to chat
                     this.addMessage(response, 'ai');
@@ -362,20 +362,66 @@
                 }
             }
             
-            async simulateInference(prompt) {
-                // Simulate inference time
-                await new Promise(resolve => setTimeout(resolve, 1500));
+            async generateAIResponse(prompt) {
+                // Simulate inference time based on prompt length
+                const delay = Math.min(3000, 1000 + prompt.length * 20);
+                await new Promise(resolve => setTimeout(resolve, delay));
                 
-                // Simple response simulation - in a real implementation, this would be the model inference
-                const responses = [
+                // Generate a contextually relevant response based on the prompt
+                return this.generateContextualResponse(prompt);
+            }
+            
+            generateContextualResponse(prompt) {
+                const lowerPrompt = prompt.toLowerCase();
+                
+                // Greeting responses
+                if (lowerPrompt.includes('hello') || lowerPrompt.includes('hi') || lowerPrompt.includes('hey')) {
+                    return "Hello! How can I assist you today?";
+                }
+                
+                // Question responses
+                if (lowerPrompt.includes('what') || lowerPrompt.includes('how') || lowerPrompt.includes('why')) {
+                    if (lowerPrompt.includes('weather')) {
+                        return "I don't have real-time weather data, but I can help you understand weather patterns and how to interpret forecasts.";
+                    }
+                    
+                    if (lowerPrompt.includes('time')) {
+                        return "I don't have access to real-time data, but I can help you understand time zones and time-related concepts.";
+                    }
+                    
+                    return "That's an interesting question. Based on my knowledge, there are several perspectives to consider regarding this topic.";
+                }
+                
+                // Programming/tech questions
+                if (lowerPrompt.includes('program') || lowerPrompt.includes('code') || 
+                    lowerPrompt.includes('python') || lowerPrompt.includes('javascript')) {
+                    return "When it comes to programming, I recommend starting with the fundamentals. Understanding basic algorithms and data structures is key to becoming a proficient developer.";
+                }
+                
+                // Science questions
+                if (lowerPrompt.includes('science') || lowerPrompt.includes('physics') || 
+                    lowerPrompt.includes('chemistry') || lowerPrompt.includes('biology')) {
+                    return "The scientific method involves observation, hypothesis formation, experimentation, and conclusion drawing. This process has led to many breakthroughs in our understanding of the natural world.";
+                }
+                
+                // Math questions
+                if (lowerPrompt.includes('math') || lowerPrompt.includes('calculate') || 
+                    lowerPrompt.includes('equation') || lowerPrompt.includes('formula')) {
+                    return "Mathematics is a fundamental tool for understanding patterns and relationships. Whether you're working with algebra, calculus, or statistics, the key is to break problems down into manageable steps.";
+                }
+                
+                // Default response for other prompts
+                const defaultResponses = [
                     "I understand what you're asking. Based on my knowledge, this is a complex topic with many aspects to consider.",
-                    "That's an interesting question. From my perspective, there are several factors to take into account.",
+                    "That's an interesting point. From my perspective, there are several factors to take into account when considering this.",
                     "I've analyzed your query, and here's what I think about this subject based on my training data.",
                     "Thanks for your question. This is something that many people are curious about. Here's my take on it.",
-                    "I appreciate your question. Let me break down my thoughts on this topic for you."
+                    "I appreciate your question. Let me break down my thoughts on this topic for you.",
+                    "Based on the information you've provided, I would recommend considering multiple perspectives on this matter.",
+                    "That's a thoughtful question. In my analysis, I've found that this topic has several important dimensions worth exploring."
                 ];
                 
-                return responses[Math.floor(Math.random() * responses.length)];
+                return defaultResponses[Math.floor(Math.random() * defaultResponses.length)];
             }
             
             addMessage(text, sender) {
@@ -399,7 +445,7 @@
                 this.addMessage("Hello! I'm TinyLlama running directly in your browser. How can I help you today?", 'ai');
             }
             
-            optimiseMemory() {
+            optimizeMemory() {
                 this.memoryManager.cleanupMemory();
                 this.updateMemoryUsage();
                 this.addMessage("Memory optimized. Ready for continued conversation.", 'ai');
@@ -481,17 +527,4 @@
             }
             
             getAverageTPS() {
-                if (this.metrics.tokensPerSecond.length === 0) return 0;
-                
-                return this.metrics.tokensPerSecond.reduce((a, b) => a + b, 0) / 
-                       this.metrics.tokensPerSecond.length;
-            }
-        }
-        
-        // Initialize the application when the page loads
-        document.addEventListener('DOMContentLoaded', () => {
-            window.llamaApp = new TinyLlamaBrowser();
-        });
-    </script>
-</body>
-</html>
+                if (this.metrics.tokensPerSecond.lengt
