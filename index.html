@@ -1,146 +1,47 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>TinyLlama 1.1B Chat (WebLLM)</title>
-  <!-- ✅ Correct WebLLM build -->
-  <script src="https://mlc.ai/web-llm/releases/v0.2.35/webllm.min.js"></script>
-  <style>
-    :root { --bg:#0b0b0c; --card:#141417; --fg:#f5f5f7; --muted:#a0a0aa; --acc:#3b82f6; }
-    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Inter, sans-serif; background:var(--bg); color:var(--fg); }
-    .wrap { max-width: 880px; margin: 0 auto; padding: 20px; }
-    .card { background:var(--card); border-radius: 18px; padding: 16px; box-shadow: 0 6px 18px rgba(0,0,0,.25); }
-    h1 { margin: 0 0 8px; font-size: 20px; }
-    #status { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
-    progress { width:100%; height: 10px; }
-    #chat { height: 55vh; overflow-y:auto; padding: 12px; border-radius: 12px; background: #101014; border:1px solid #24242a; }
-    .msg { margin: 10px 0; line-height: 1.5; white-space: pre-wrap; }
-    .you { color:#e2e8f0; }
-    .bot { color:#d1ffd8; }
-    .row { display:flex; gap:10px; margin-top:10px; }
-    textarea { flex:1; resize: vertical; min-height: 52px; max-height: 140px; padding: 10px 12px; border-radius: 12px; border:1px solid #2c2c33; background:#0f1115; color:var(--fg); }
-    button { padding: 12px 16px; border-radius: 12px; border:0; background: var(--acc); color:white; font-weight:600; cursor:pointer; }
-    button:disabled { opacity:.6; cursor:not-allowed; }
-    .tiny { font-size:12px; color:var(--muted); margin-top:8px; }
-    code { background:#0c0c0e; padding:2px 6px; border-radius:6px; }
-  </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>TinyLlama Chat (CPU Mode)</title>
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <h1>🦙 TinyLlama 1.1B Chat — WebGPU (browser)</h1>
-      <div id="status">Loading model…</div>
-      <progress id="bar" max="100" value="0"></progress>
-      <div class="tiny">Model: <code>mlc-ai/TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC</code> (Hugging Face)</div>
-    </div>
+  <h2>TinyLlama Chat (WASM CPU Mode)</h2>
+  <div id="chat" style="border:1px solid #ccc; padding:10px; height:300px; overflow-y:auto;"></div>
+  <input id="userInput" type="text" placeholder="Type your message..." style="width:80%;">
+  <button onclick="sendMessage()">Send</button>
 
-    <div class="card" style="margin-top:12px;">
-      <div id="chat"></div>
-      <div class="row">
-        <textarea id="input" placeholder="Type your message…"></textarea>
-        <button id="send" disabled>Send</button>
-      </div>
-      <div class="tiny">
-        Tip: first load can take a minute (weights cached by the browser). Requires Chrome/Edge with WebGPU enabled.
-      </div>
-    </div>
-  </div>
-
+  <script src="https://huggingface.github.io/llama.cpp/web/llama.js"></script>
   <script>
-    const chatEl   = document.getElementById("chat");
-    const inputEl  = document.getElementById("input");
-    const sendBtn  = document.getElementById("send");
-    const statusEl = document.getElementById("status");
-    const barEl    = document.getElementById("bar");
+    let model;
+    const chatBox = document.getElementById("chat");
 
-    // 1) Initialize WebLLM engine and load TinyLlama model from Hugging Face
-    let engine;
-    (async () => {
-      const modelId = "TinyLlama-1.1B-Chat-v1.0-q4f16_1-MLC"; // HF repo: mlc-ai/…
-      statusEl.textContent = "Requesting model files…";
-
-      engine = await webllm.CreateMLCEngine(modelId, {
-        // Show granular loading progress
-        initProgressCallback: (report) => {
-          if (report.progress) {
-            const pct = Math.round(report.progress * 100);
-            barEl.value = pct; 
-            statusEl.textContent = report.text || `Loading… ${pct}%`;
-          } else if (report.text) {
-            statusEl.textContent = report.text;
-          }
-        }
+    async function loadModel() {
+      chatBox.innerHTML += "<div>Loading TinyLlama... (this may take a minute)</div>";
+      model = await llama.loadModel({
+        model: "https://huggingface.co/second-state/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat.Q4_K_M.bin",
+        wasmUrl: "https://huggingface.github.io/llama.cpp/web/llama.wasm"
       });
-
-      statusEl.textContent = "Model ready. Say hi!";
-      barEl.value = 100;
-      sendBtn.disabled = false;
-      inputEl.focus();
-      appendMsg("bot", "Hello! I’m TinyLlama running fully in your browser. How can I help?");
-    })();
-
-    // Maintain chat history (OpenAI-style)
-    const messages = [
-      { role: "system", content: "You are a helpful, concise assistant." }
-    ];
-
-    function appendMsg(who, text) {
-      const div = document.createElement("div");
-      div.className = "msg " + (who === "you" ? "you" : "bot");
-      div.textContent = (who === "you" ? "You: " : "TinyLlama: ") + text;
-      chatEl.appendChild(div);
-      chatEl.scrollTop = chatEl.scrollHeight;
+      chatBox.innerHTML += "<div>✅ Model loaded! Start chatting.</div>";
     }
 
-    async function send() {
-      const content = inputEl.value.trim();
-      if (!content || !engine) return;
+    async function sendMessage() {
+      const input = document.getElementById("userInput");
+      const userMsg = input.value;
+      if (!userMsg.trim()) return;
+      chatBox.innerHTML += `<div><b>You:</b> ${userMsg}</div>`;
+      input.value = "";
 
-      appendMsg("you", content);
-      inputEl.value = "";
-      sendBtn.disabled = true;
-
-      messages.push({ role: "user", content });
-
-      // 2) Stream a response from the model
-      let buffer = "";
-      appendMsg("bot", ""); // create placeholder node to stream into
-      const placeholder = chatEl.lastChild;
-
-      try {
-        const stream = await engine.chat.completions.create({
-          messages,
-          stream: true,
-          temperature: 0.7,
-          max_tokens: 512
-        });
-
-        for await (const chunk of stream) {
-          const delta = chunk.choices?.[0]?.delta?.content || "";
-          if (delta) {
-            buffer += delta;
-            placeholder.textContent = "TinyLlama: " + buffer;
-            chatEl.scrollTop = chatEl.scrollHeight;
-          }
-        }
-      } catch (e) {
-        buffer = "(error) " + (e && e.message ? e.message : String(e));
-        placeholder.textContent = "TinyLlama: " + buffer;
-      } finally {
-        messages.push({ role: "assistant", content: buffer });
-        sendBtn.disabled = false;
-        inputEl.focus();
+      let reply = "";
+      for await (const chunk of model.chat(userMsg)) {
+        reply += chunk;
+        document.getElementById("chat").lastElementChild?.remove();
+        chatBox.innerHTML += `<div><b>Bot:</b> ${reply}</div>`;
+        chatBox.scrollTop = chatBox.scrollHeight;
       }
     }
 
-    sendBtn.addEventListener("click", send);
-    inputEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) {
-        e.preventDefault();
-        send();
-      }
-    });
+    loadModel();
   </script>
 </body>
 </html>
