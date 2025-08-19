@@ -2,89 +2,221 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Tiny Chat (DistilGPT2 in Browser)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>GPT-2 Small — In-Browser Chat</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <style>
-    body { margin:0; padding:20px; font-family:sans-serif; background:#1a1a1a; color:#eee; }
-    .chat { max-width:600px; margin:0 auto; }
-    .msg { padding:8px; margin:4px 0; border-radius:6px; }
-    .you { background:#444; text-align:right; }
-    .bot { background:#222; text-align:left; }
-    .progress { width:100%; height:12px; background:#333; margin:10px 0; border-radius:6px; overflow:hidden; }
-    .bar { height:100%; width:0%; background:#6cf; transition:width .2s; }
-    textarea { width:100%; height:60px; background:#333; border:none; border-radius:6px; padding:8px; color:#eee; }
-    button { padding:10px 16px; border:none; border-radius:6px; margin:4px 2px; background:#6cf; color:#000; font-weight:bold; cursor:pointer; }
-    button:disabled { opacity:.5; cursor:default; }
+    :root{
+      --bg:#071021; --card: rgba(255,255,255,0.04); --muted:#9fb0c8; --text:#e6f0fb;
+      --accent1:#6ea8ff; --accent2:#6fffd1; --radius:14px;
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
+      background: radial-gradient(800px 400px at 10% -10%, #0e304b 0%, #071021 50%, #04060a 100%);
+      font-family: Inter, Roboto, system-ui, -apple-system, "Segoe UI", Arial; color:var(--text); padding:20px;
+    }
+    .app{
+      width:min(920px,96%); border-radius:var(--radius); padding:16px; background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
+      border:1px solid rgba(255,255,255,0.04); backdrop-filter: blur(6px);
+      display:grid; gap:12px; grid-template-rows:auto auto 1fr auto;
+      box-shadow: 0 18px 50px rgba(2,6,23,0.6);
+    }
+    .head{display:flex;align-items:center;gap:12px}
+    .logo{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;font-weight:800;color:#03121a;background:linear-gradient(135deg,var(--accent1),var(--accent2));box-shadow:0 8px 26px rgba(110,168,255,0.18)}
+    .title{font-size:18px;font-weight:700}
+    .sub{color:var(--muted);font-size:13px}
+    .progress{display:flex;align-items:center;gap:10px;background:var(--card);padding:10px;border-radius:12px;border:1px solid rgba(255,255,255,0.03)}
+    .bar-wrap{flex:1;background:rgba(255,255,255,0.03);height:12px;border-radius:999px;overflow:hidden}
+    .bar{height:100%;width:0%;background:linear-gradient(90deg,var(--accent1),var(--accent2));transition:width .12s ease}
+    .pct{width:56px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
+    .status{color:var(--muted);font-size:13px}
+    .chat{background:rgba(255,255,255,0.02);border-radius:12px;padding:12px;min-height:360px;max-height:58vh;overflow:auto;border:1px solid rgba(255,255,255,0.04)}
+    .msg{padding:10px 12px;border-radius:12px;max-width:86%;white-space:pre-wrap;margin:8px 0}
+    .me{align-self:flex-end;background:rgba(110,168,255,0.12);border:1px solid rgba(110,168,255,0.25);color:#eaf6ff;margin-left:auto}
+    .bot{align-self:flex-start;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);color:var(--text);margin-right:auto}
+    .controls{display:flex;gap:10px;align-items:flex-end}
+    .input{flex:1;display:flex;background:var(--card);border-radius:12px;padding:10px;border:1px solid rgba(255,255,255,0.03)}
+    textarea{flex:1;background:transparent;border:0;color:var(--text);resize:vertical;min-height:64px;max-height:200px;outline:none;font:inherit}
+    button{appearance:none;border:0;padding:10px 14px;border-radius:10px;background:linear-gradient(135deg,var(--accent1),var(--accent2));color:#03121a;font-weight:700;cursor:pointer;box-shadow:0 8px 20px rgba(110,168,255,0.14)}
+    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.03);color:var(--muted)}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .tiny{font-size:12px;color:var(--muted)}
+    .note{font-size:12px;color:var(--muted);margin-top:8px}
   </style>
 </head>
 <body>
-  <div class="chat">
-    <h2>Tiny Chat (DistilGPT2)</h2>
-    <div id="chatBox"></div>
-    <div class="progress"><div id="bar" class="bar"></div></div>
-    <button id="btnLoad">Load Model</button>
-    <textarea id="input" placeholder="Type your message..." disabled></textarea>
-    <button id="btnSend" disabled>Send</button>
+  <div class="app" id="app">
+    <div class="head">
+      <div class="logo">GPT2</div>
+      <div>
+        <div class="title">GPT-2 Small — In-Browser Chat</div>
+        <div class="sub">No server — runs on CPU using transformers.js (Xenova). Small model suitable for Android.</div>
+      </div>
+      <div style="margin-left:auto">
+        <div class="tiny" id="modelBadge">Model: gpt2 (small)</div>
+      </div>
+    </div>
+
+    <div class="progress">
+      <div class="status" id="status">Click <b>Load Model</b> to begin</div>
+      <div class="bar-wrap" aria-hidden="true"><div class="bar" id="bar"></div></div>
+      <div class="pct" id="pct">0%</div>
+      <button id="btnLoad">Load Model</button>
+    </div>
+
+    <div class="chat" id="chat">
+      <div class="msg bot">👋 Hello — model not loaded. Tap <b>Load Model</b> to download (~100 MB) and chat locally.</div>
+    </div>
+
+    <div class="controls">
+      <div class="input">
+        <textarea id="prompt" placeholder="Type your message…" disabled></textarea>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:8px">
+        <button id="btnSend" disabled>Send</button>
+        <button id="btnClear" class="secondary">Clear</button>
+      </div>
+    </div>
+
+    <div class="note">If module imports fail on <code>file://</code>, serve via a tiny static server (e.g. <code>python -m http.server</code>).</div>
   </div>
 
   <script type="module">
-    import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0";
+    // transformers.js from Xenova (runs on CPU via WASM)
+    import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0/dist/transformers.min.js";
 
-    const chatBox = document.getElementById('chatBox');
-    const bar = document.getElementById('bar');
-    const btnLoad = document.getElementById('btnLoad');
-    const btnSend = document.getElementById('btnSend');
-    const input = document.getElementById('input');
+    // UI refs
+    const statusEl = document.getElementById("status");
+    const barEl = document.getElementById("bar");
+    const pctEl = document.getElementById("pct");
+    const btnLoad = document.getElementById("btnLoad");
+    const btnSend = document.getElementById("btnSend");
+    const btnClear = document.getElementById("btnClear");
+    const promptEl = document.getElementById("prompt");
+    const chatEl = document.getElementById("chat");
 
     let generator = null;
-    let history = [];
+    const history = []; // keep small
 
-    function addMsg(text, who) {
-      const div = document.createElement('div');
-      div.textContent = text;
-      div.className = 'msg ' + who;
-      chatBox.appendChild(div);
-      chatBox.scrollTop = chatBox.scrollHeight;
+    function addMsg(text, who="bot"){
+      const d = document.createElement("div");
+      d.className = "msg " + (who==="me" ? "me" : "bot");
+      d.textContent = text;
+      chatEl.appendChild(d);
+      chatEl.scrollTop = chatEl.scrollHeight;
+      return d;
     }
-    function setProgress(p) { bar.style.width = Math.min(100, Math.round(p)) + '%'; }
 
-    btnLoad.onclick = async () => {
-      btnLoad.disabled = true;
-      addMsg("⏳ Loading DistilGPT2 (~80 MB)...", "bot");
+    function setProgress(p, label){
+      const v = Math.max(0, Math.min(100, Math.round(p)));
+      barEl.style.width = v + "%";
+      pctEl.textContent = v + "%";
+      if (label) statusEl.innerHTML = label;
+    }
 
-      generator = await pipeline("text-generation", "Xenova/distilgpt2", {
-        progress_callback: (data) => {
-          if (data.loaded && data.total) {
-            setProgress((data.loaded / data.total) * 100);
-          }
-        }
-      });
+    function setBusy(b){
+      btnSend.disabled = b || !generator;
+      promptEl.disabled = b || !generator;
+      btnLoad.disabled = b || !!generator;
+    }
 
-      addMsg("✅ Model loaded! You can chat now.", "bot");
-      input.disabled = false; btnSend.disabled = false;
-    };
+    // Build a conversational prompt keeping it short to avoid repetition loops
+    function buildPrompt(userText){
+      // Keep only the last 3 turns to avoid very long prompts
+      const maxTurns = 3;
+      const shortHistory = history.slice(-maxTurns);
+      let prompt = "The following is a conversation between a helpful AI assistant and a user.\n";
+      for(const turn of shortHistory){
+        prompt += `${turn.role === "user" ? "User" : "Assistant"}: ${turn.text}\n`;
+      }
+      prompt += `User: ${userText}\nAssistant:`;
+      return prompt;
+    }
 
-    btnSend.onclick = async () => {
-      if (!generator || !input.value.trim()) return;
-      const user = input.value;
-      history.push("User: " + user);
-      addMsg(user, "you");
-      input.value = "";
+    btnLoad.addEventListener("click", async () => {
+      setBusy(true);
+      setProgress(0, "Loading GPT-2 model files…");
 
-      addMsg("…thinking…", "bot");
+      try {
+        // create pipeline and show download progress via progress_callback
+        generator = await pipeline("text-generation", "gpt2", {
+          progress_callback: (data) => {
+            if (data && data.loaded && data.total) {
+              setProgress((data.loaded / data.total) * 100, `Downloading model files… ${(data.loaded/1024/1024).toFixed(1)} / ${(data.total/1024/1024).toFixed(1)} MB`);
+            }
+          },
+          // prefer the wasm CPU backend (default) — no GPU needed
+          // you can also set modelRevision or trustRemoteCode if using custom HF repos
+        });
 
-      const prompt = history.join("\n") + "\nAssistant:";
-      const output = await generator(prompt, {
-        max_new_tokens: 60,
-        do_sample: true,
-        top_k: 50,
-        temperature: 0.7
-      });
+        setProgress(100, "Model loaded. Ready!");
+        addMsg("✅ Model loaded. Say hi!");
+        promptEl.disabled = false;
+        btnSend.disabled = false;
+      } catch (e) {
+        console.error(e);
+        setProgress(0, "Failed to load model (see console).");
+        addMsg("❌ Model load failed. Check console for errors.", "bot");
+      } finally {
+        setBusy(false);
+      }
+    });
 
-      const reply = output[0].generated_text.split("Assistant:").pop().trim();
-      history.push("Assistant: " + reply);
-      chatBox.lastChild.textContent = reply;
-    };
+    btnSend.addEventListener("click", async () => {
+      if (!generator) return;
+      const userText = promptEl.value.trim();
+      if (!userText) return;
+      promptEl.value = "";
+      history.push({ role: "user", text: userText });
+      addMsg(userText, "me");
+      const thinking = addMsg("…thinking…", "bot");
+      setBusy(true);
+
+      try {
+        const prompt = buildPrompt(userText);
+
+        // run generation
+        const output = await generator(prompt, {
+          max_new_tokens: 80,
+          do_sample: true,
+          temperature: 0.7,
+          top_k: 50,
+          top_p: 0.95,
+          // repetition_penalty is not supported by every backend — if ignored it's fine
+        });
+
+        // output[0].generated_text includes the prompt; extract assistant text
+        const fullText = output && output[0] && output[0].generated_text ? output[0].generated_text : "";
+        let reply = "";
+        // Try to extract the text after the last "Assistant:" marker
+        const marker = "Assistant:";
+        const idx = fullText.lastIndexOf(marker);
+        if (idx >= 0) reply = fullText.substring(idx + marker.length).trim();
+        else reply = fullText.replace(prompt, "").trim();
+
+        // If model repeats "User: User:", try to clean simple artifacts
+        reply = reply.replace(/\bUser:\s*/gi, "").trim();
+
+        thinking.textContent = reply || "(no output)";
+        history.push({ role: "assistant", text: reply || "" });
+      } catch (e) {
+        console.error(e);
+        thinking.textContent = "⚠️ Error generating reply.";
+      } finally {
+        setBusy(false);
+      }
+    });
+
+    btnClear.addEventListener("click", () => {
+      history.length = 0;
+      chatEl.innerHTML = "";
+      addMsg("🧹 Cleared conversation.", "bot");
+    });
+
+    // allow enter to send
+    promptEl.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); btnSend.click(); }
+    });
   </script>
 </body>
 </html>
