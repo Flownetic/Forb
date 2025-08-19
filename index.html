@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Phi-mini in Browser (Android)</title>
   <style>
-    body { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial; padding: 18px; background:#f7f7fb; color:#111; }
+    body { font-family: system-ui, sans-serif; padding: 18px; background:#f7f7fb; color:#111; }
     .card { background:white; border-radius:12px; box-shadow:0 6px 18px rgba(20,20,40,0.06); padding:16px; max-width:720px; margin:auto; }
     h1 { font-size:18px; margin:0 0 10px; }
     textarea { width:100%; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid #ddd; font-size:15px; resize:vertical; min-height:90px; }
@@ -16,136 +16,94 @@
     .progress { height:10px; background:#e6eef8; border-radius:999px; overflow:hidden; }
     .progress > div { height:100%; width:0%; background:#10b981; transition:width .2s ease; }
     .meta { font-size:13px; color:#555; margin-top:8px; }
-    .footer { font-size:13px; color:#666; margin-top:12px; }
   </style>
 </head>
 <body>
   <div class="card">
     <h1>Phi-mini (client-side) — runs in your Android browser</h1>
 
-    <div class="progress-wrap" aria-hidden="false">
-      <div class="progress" id="progressBar"><div id="progressFill"></div></div>
+    <div class="progress-wrap">
+      <div class="progress"><div id="progressFill"></div></div>
       <div class="meta" id="progressText">Model not loaded</div>
     </div>
 
     <label for="prompt">Prompt</label>
-    <textarea id="prompt" placeholder="Type your question or prompt here...">Explain quantum entanglement in simple terms.</textarea>
+    <textarea id="prompt" placeholder="Type something...">Explain quantum entanglement in simple terms.</textarea>
 
     <div style="display:flex; gap:8px; margin-top:10px; align-items:center;">
       <button id="generateBtn" disabled>Generate</button>
-      <select id="maxTokens" title="Max new tokens" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-        <option value="80">Max tokens: 80</option>
-        <option value="150" selected>Max tokens: 150</option>
-        <option value="300">Max tokens: 300</option>
+      <select id="maxTokens" style="padding:8px;border-radius:8px;border:1px solid #ddd">
+        <option value="80">80 tokens</option>
+        <option value="150" selected>150 tokens</option>
+        <option value="300">300 tokens</option>
       </select>
-      <label style="margin-left:auto;font-size:13px;color:#666">Device: <span id="deviceLabel">auto</span></label>
     </div>
 
     <pre id="output">Output will appear here.</pre>
-
-    <div class="footer">
-      Notes: first load downloads the model (may be ~100–300MB depending on quantization). Works offline after caching. Best on mid/high-end Android devices.
-    </div>
   </div>
 
-  <!-- Transformers.js (Xenova) -->
-  <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0/dist/transformers.min.js"></script>
+  <!-- Transformers.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers/dist/transformers.min.js"></script>
   <script>
     (async () => {
       const progressFill = document.getElementById('progressFill');
       const progressText = document.getElementById('progressText');
-      const progressBar = document.getElementById('progressBar');
       const generateBtn = document.getElementById('generateBtn');
       const output = document.getElementById('output');
       const promptEl = document.getElementById('prompt');
       const maxTokensSel = document.getElementById('maxTokens');
-      const deviceLabel = document.getElementById('deviceLabel');
 
-      // Model choice: Xenova-converted phi mini (works with transformers.js).
-      // If this ID becomes unavailable, you can replace with another Xenova-converted small model.
-      const MODEL_ID = "Xenova/phi-1_5-mini";
+      const MODEL_ID = "Xenova/phi-1_5-mini"; // Phi-mini model
 
-      // Preferred device: 'auto' will pick webgpu if available else webgl/wasm fallback.
-      const DEVICE = "auto";
-      deviceLabel.textContent = DEVICE;
-
-      // Progress callback (value between 0 and 1)
       function setProgress(p, text) {
         const pct = Math.round(p * 100);
         progressFill.style.width = pct + "%";
         progressText.textContent = text ?? `Loading model: ${pct}%`;
       }
 
-      // Attempt to load pipeline
-      progressText.textContent = "Initializing transformers.js runtime...";
       try {
-        // Ensure the runtime is initialized (this will prepare WASM/WebGPU backends)
-        await window.transformers.init();
+        progressText.textContent = "Downloading & preparing model...";
 
-        // Create pipeline with progress callback
-        progressText.textContent = "Downloading & preparing model (may take a while)...";
         const pipe = await window.transformers.pipeline(
           "text-generation",
           MODEL_ID,
           {
             progress_callback: (p) => {
-              // p may be an object or number depending on version; handle both
-              if (typeof p === "number") {
-                setProgress(p);
-              } else if (p && typeof p === "object" && p.loaded && p.total) {
+              if (p && p.loaded && p.total) {
                 setProgress(p.loaded / p.total);
-              } else if (p && p.percent) {
-                setProgress(p.percent / 100);
               }
             },
-            // Device setting (auto chooses best available)
-            device: DEVICE,
-            // Optionally set low CPU priority for mobile: (not all builds support this)
-            // "use_cache": true
+            device: "auto", // will use WebGPU if supported
           }
         );
 
-        // Model ready
         setProgress(1, "Model ready!");
         generateBtn.disabled = false;
 
-        // Generate on click
         generateBtn.addEventListener('click', async () => {
           const prompt = promptEl.value.trim();
           if (!prompt) return;
           generateBtn.disabled = true;
-          output.textContent = "Generating... (this runs on your device)";
+          output.textContent = "Generating...";
           try {
             const max_new_tokens = parseInt(maxTokensSel.value, 10);
-            // Call pipeline. Options may vary; keep simple and compatible.
             const res = await pipe(prompt, {
               max_new_tokens,
               temperature: 0.7,
               top_p: 0.9,
-              // return_full_text true by default for many pipelines; adjust if needed.
             });
-            // res is usually an array like [{generated_text: "..."}]
-            let text = "";
-            if (Array.isArray(res) && res.length) {
-              text = res[0].generated_text ?? JSON.stringify(res[0]);
-            } else if (res && typeof res === "object") {
-              text = res.generated_text ?? JSON.stringify(res);
-            } else {
-              text = String(res);
-            }
-            output.textContent = text;
+            output.textContent = res[0].generated_text;
           } catch (err) {
-            console.error(err);
-            output.textContent = "Generation error: " + (err?.message ?? String(err));
+            output.textContent = "Error: " + (err?.message ?? err);
           } finally {
             generateBtn.disabled = false;
           }
         });
 
       } catch (err) {
-        console.error("Model load failed:", err);
-        progressText.textContent = "Model load failed. See console for details.";
-        output.textContent = "Model failed to load: " + (err?.message ?? String(err));
+        console.error(err);
+        progressText.textContent = "Model load failed.";
+        output.textContent = "Model failed to load: " + (err?.message ?? err);
       }
     })();
   </script>
