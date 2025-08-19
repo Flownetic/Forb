@@ -3,46 +3,31 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Phi-mini in Browser (Android)</title>
+  <title>Browser LLM Demo</title>
   <style>
     body { font-family: system-ui, sans-serif; padding: 18px; background:#f7f7fb; color:#111; }
     .card { background:white; border-radius:12px; box-shadow:0 6px 18px rgba(20,20,40,0.06); padding:16px; max-width:720px; margin:auto; }
-    h1 { font-size:18px; margin:0 0 10px; }
-    textarea { width:100%; box-sizing:border-box; padding:10px; border-radius:8px; border:1px solid #ddd; font-size:15px; resize:vertical; min-height:90px; }
+    textarea { width:100%; padding:10px; border-radius:8px; border:1px solid #ddd; font-size:15px; resize:vertical; min-height:90px; }
     button { padding:10px 14px; border-radius:8px; border:0; background:#2563eb; color:white; font-weight:600; cursor:pointer; }
     button:disabled { opacity:0.6; cursor:default; }
     pre { white-space:pre-wrap; word-break:break-word; background:#0f1724; color:#e6eef8; padding:12px; border-radius:8px; margin-top:12px; min-height:72px; }
-    .progress-wrap { margin:12px 0; }
-    .progress { height:10px; background:#e6eef8; border-radius:999px; overflow:hidden; }
+    .progress { height:10px; background:#e6eef8; border-radius:999px; overflow:hidden; margin:12px 0; }
     .progress > div { height:100%; width:0%; background:#10b981; transition:width .2s ease; }
-    .meta { font-size:13px; color:#555; margin-top:8px; }
   </style>
 </head>
 <body>
   <div class="card">
-    <h1>Phi-mini (client-side) — runs in your Android browser</h1>
+    <h1>LLM in your browser (no server)</h1>
 
-    <div class="progress-wrap">
-      <div class="progress"><div id="progressFill"></div></div>
-      <div class="meta" id="progressText">Model not loaded</div>
-    </div>
+    <div class="progress"><div id="progressFill"></div></div>
+    <div id="progressText">Model not loaded</div>
 
-    <label for="prompt">Prompt</label>
-    <textarea id="prompt" placeholder="Type something...">Explain quantum entanglement in simple terms.</textarea>
-
-    <div style="display:flex; gap:8px; margin-top:10px; align-items:center;">
-      <button id="generateBtn" disabled>Generate</button>
-      <select id="maxTokens" style="padding:8px;border-radius:8px;border:1px solid #ddd">
-        <option value="80">80 tokens</option>
-        <option value="150" selected>150 tokens</option>
-        <option value="300">300 tokens</option>
-      </select>
-    </div>
+    <textarea id="prompt">Explain gravity in simple words.</textarea><br><br>
+    <button id="generateBtn" disabled>Generate</button>
 
     <pre id="output">Output will appear here.</pre>
   </div>
 
-  <!-- Transformers.js -->
   <script src="https://cdn.jsdelivr.net/npm/@xenova/transformers/dist/transformers.min.js"></script>
   <script>
     (async () => {
@@ -51,59 +36,49 @@
       const generateBtn = document.getElementById('generateBtn');
       const output = document.getElementById('output');
       const promptEl = document.getElementById('prompt');
-      const maxTokensSel = document.getElementById('maxTokens');
-
-      const MODEL_ID = "Xenova/phi-1_5-mini"; // Phi-mini model
 
       function setProgress(p, text) {
         const pct = Math.round(p * 100);
         progressFill.style.width = pct + "%";
-        progressText.textContent = text ?? `Loading model: ${pct}%`;
+        progressText.textContent = text ?? `Loading: ${pct}%`;
       }
 
       try {
-        progressText.textContent = "Downloading & preparing model...";
+        setProgress(0, "Downloading GPT-2 model...");
 
+        // ✅ Use a model that is confirmed to work in browser
         const pipe = await window.transformers.pipeline(
           "text-generation",
-          MODEL_ID,
+          "Xenova/gpt2",
           {
             progress_callback: (p) => {
               if (p && p.loaded && p.total) {
                 setProgress(p.loaded / p.total);
               }
             },
-            device: "auto", // will use WebGPU if supported
+            device: "auto",
           }
         );
 
         setProgress(1, "Model ready!");
         generateBtn.disabled = false;
 
-        generateBtn.addEventListener('click', async () => {
+        generateBtn.addEventListener("click", async () => {
           const prompt = promptEl.value.trim();
           if (!prompt) return;
           generateBtn.disabled = true;
           output.textContent = "Generating...";
           try {
-            const max_new_tokens = parseInt(maxTokensSel.value, 10);
-            const res = await pipe(prompt, {
-              max_new_tokens,
-              temperature: 0.7,
-              top_p: 0.9,
-            });
+            const res = await pipe(prompt, { max_new_tokens: 80 });
             output.textContent = res[0].generated_text;
           } catch (err) {
             output.textContent = "Error: " + (err?.message ?? err);
-          } finally {
-            generateBtn.disabled = false;
           }
+          generateBtn.disabled = false;
         });
-
       } catch (err) {
-        console.error(err);
         progressText.textContent = "Model load failed.";
-        output.textContent = "Model failed to load: " + (err?.message ?? err);
+        output.textContent = "Error: " + (err?.message ?? err);
       }
     })();
   </script>
