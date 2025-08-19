@@ -2,227 +2,89 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
-  <title>Tiny On-Device Chat — WASM (TinyMistral)</title>
+  <title>Tiny Chat (DistilGPT2 in Browser)</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <style>
-    :root{
-      --bg:#071021; --card: rgba(255,255,255,0.04); --muted:#9fb0c8; --text:#e6f0fb;
-      --accent1:#6ea8ff; --accent2:#6fffd1; --radius:16px;
-    }
-    *{box-sizing:border-box}
-    body{
-      margin:0; min-height:100vh; display:flex; align-items:center; justify-content:center;
-      background: radial-gradient(800px 400px at 10% -10%, #0e304b 0%, #071021 50%, #04060a 100%);
-      font-family: Inter, Roboto, system-ui, -apple-system, "Segoe UI", Arial; color:var(--text); padding:20px;
-    }
-    .app{
-      width:min(980px,100%); border-radius:var(--radius); padding:18px; background:linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.02));
-      border:1px solid rgba(255,255,255,0.04); box-shadow: 0 18px 50px rgba(2,6,23,0.6);
-      display:grid; gap:12px; grid-template-rows:auto auto 1fr auto;
-    }
-    .head{display:flex;align-items:center;gap:12px}
-    .logo{width:44px;height:44px;border-radius:10px;display:grid;place-items:center;font-weight:800;color:#03121a;background:linear-gradient(135deg,var(--accent1),var(--accent2));box-shadow:0 8px 26px rgba(110,168,255,0.18)}
-    .title{font-size:18px;font-weight:700}
-    .sub{color:var(--muted);font-size:13px}
-    .progress{display:flex;align-items:center;gap:10px;background:var(--card);padding:10px;border-radius:12px;border:1px solid rgba(255,255,255,0.03)}
-    .bar-wrap{flex:1;background:rgba(255,255,255,0.04);height:12px;border-radius:999px;overflow:hidden}
-    .bar{height:100%;width:0%;background:linear-gradient(90deg,var(--accent1),var(--accent2));transition:width .12s ease}
-    .pct{width:56px;text-align:right;color:var(--muted);font-variant-numeric:tabular-nums}
-    .status{color:var(--muted);font-size:13px}
-    .chat{background:rgba(255,255,255,0.03);border-radius:12px;padding:12px;min-height:360px;max-height:58vh;overflow:auto;border:1px solid rgba(255,255,255,0.04)}
-    .msg{padding:10px 12px;border-radius:12px;max-width:86%;white-space:pre-wrap}
-    .me{align-self:flex-end;background:rgba(110,168,255,0.12);border:1px solid rgba(110,168,255,0.25);color:#eaf6ff;margin-left:auto}
-    .bot{align-self:flex-start;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);color:var(--text);margin-right:auto}
-    .controls{display:flex;gap:10px;align-items:flex-end}
-    .input{flex:1;display:flex;background:var(--card);border-radius:12px;padding:10px;border:1px solid rgba(255,255,255,0.03)}
-    textarea{flex:1;background:transparent;border:0;color:var(--text);resize:vertical;min-height:64px;max-height:200px;outline:none;font:inherit}
-    button{appearance:none;border:0;padding:10px 14px;border-radius:10px;background:linear-gradient(135deg,var(--accent1),var(--accent2));color:#03121a;font-weight:700;cursor:pointer;box-shadow:0 8px 20px rgba(110,168,255,0.14)}
-    button.secondary{background:transparent;border:1px solid rgba(255,255,255,0.04);color:var(--muted)}
-    button:disabled{opacity:.5;cursor:not-allowed}
-    .tiny{font-size:12px;color:var(--muted)}
+    body { margin:0; padding:20px; font-family:sans-serif; background:#1a1a1a; color:#eee; }
+    .chat { max-width:600px; margin:0 auto; }
+    .msg { padding:8px; margin:4px 0; border-radius:6px; }
+    .you { background:#444; text-align:right; }
+    .bot { background:#222; text-align:left; }
+    .progress { width:100%; height:12px; background:#333; margin:10px 0; border-radius:6px; overflow:hidden; }
+    .bar { height:100%; width:0%; background:#6cf; transition:width .2s; }
+    textarea { width:100%; height:60px; background:#333; border:none; border-radius:6px; padding:8px; color:#eee; }
+    button { padding:10px 16px; border:none; border-radius:6px; margin:4px 2px; background:#6cf; color:#000; font-weight:bold; cursor:pointer; }
+    button:disabled { opacity:.5; cursor:default; }
   </style>
 </head>
 <body>
-  <div class="app" id="app">
-    <div class="head">
-      <div class="logo">AI</div>
-      <div>
-        <div class="title">Tiny On-Device Chat</div>
-        <div class="sub">TinyMistral-248M (smallest practical on-device model). WASM CPU — works on Android & desktop.</div>
-      </div>
-      <div style="margin-left:auto;display:flex;gap:8px;align-items:center">
-        <div class="tiny" id="modelBadge">Model: TinyMistral-248M Q8_0</div>
-      </div>
-    </div>
-
-    <div class="progress">
-      <div class="status" id="status">Click <b>Load Model</b> to begin</div>
-      <div class="bar-wrap" aria-hidden="true"><div class="bar" id="bar"></div></div>
-      <div class="pct" id="pct">0%</div>
-      <button id="btnLoad">Load Model</button>
-    </div>
-
-    <div class="chat" id="chat">
-      <div class="msg bot">👋 Hello — model is not loaded yet. Tap <b>Load Model</b> to download (~260 MB) and run locally.</div>
-    </div>
-
-    <div class="controls">
-      <div class="input">
-        <textarea id="prompt" placeholder="Type your message…" disabled></textarea>
-      </div>
-      <div style="display:flex;flex-direction:column;gap:8px">
-        <button id="btnSend" disabled>Send</button>
-        <button id="btnClear" class="secondary">Clear</button>
-      </div>
-    </div>
-
-    <div class="tiny">Note: first load downloads and caches the model. Subsequent loads will be faster. If using an Android browser, use Chrome/Edge/Brave for best compatibility.</div>
+  <div class="chat">
+    <h2>Tiny Chat (DistilGPT2)</h2>
+    <div id="chatBox"></div>
+    <div class="progress"><div id="bar" class="bar"></div></div>
+    <button id="btnLoad">Load Model</button>
+    <textarea id="input" placeholder="Type your message..." disabled></textarea>
+    <button id="btnSend" disabled>Send</button>
   </div>
 
   <script type="module">
-    // Uses @wllama/wllama (llama.cpp WASM wrapper).
-    import { Wllama, LoggerWithoutDebug } from "https://cdn.jsdelivr.net/npm/@wllama/wllama@2.3.4/esm/index.js";
-    import WasmFromCDN from "https://cdn.jsdelivr.net/npm/@wllama/wllama@2.3.4/esm/wasm-from-cdn.js";
+    import { pipeline } from "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.6.0";
 
-    // UI refs
-    const statusEl = document.getElementById("status");
-    const barEl = document.getElementById("bar");
-    const pctEl = document.getElementById("pct");
-    const btnLoad = document.getElementById("btnLoad");
-    const btnSend = document.getElementById("btnSend");
-    const btnClear = document.getElementById("btnClear");
-    const promptEl = document.getElementById("prompt");
-    const chatEl = document.getElementById("chat");
+    const chatBox = document.getElementById('chatBox');
+    const bar = document.getElementById('bar');
+    const btnLoad = document.getElementById('btnLoad');
+    const btnSend = document.getElementById('btnSend');
+    const input = document.getElementById('input');
 
-    // Model choice — smallest practical: TinyMistral-248M Q8_0 (~264MB)
-    const HF_REPO = "tensorblock/TinyMistral-248M-GGUF";
-    const HF_FILE = "TinyMistral-248M-Q8_0.gguf";
+    let generator = null;
+    let history = [];
 
-    let wllama = null;
-    let modelReady = false;
-    const history = [];
-
-    function addMsg(text, who = "bot") {
-      const d = document.createElement("div");
-      d.className = "msg " + (who === "me" ? "me" : "bot");
-      d.textContent = text;
-      chatEl.appendChild(d);
-      chatEl.scrollTop = chatEl.scrollHeight;
-      return d;
+    function addMsg(text, who) {
+      const div = document.createElement('div');
+      div.textContent = text;
+      div.className = 'msg ' + who;
+      chatBox.appendChild(div);
+      chatBox.scrollTop = chatBox.scrollHeight;
     }
+    function setProgress(p) { bar.style.width = Math.min(100, Math.round(p)) + '%'; }
 
-    function setProgress(percent, label) {
-      const p = Math.max(0, Math.min(100, Math.round(percent)));
-      barEl.style.width = p + "%";
-      pctEl.textContent = p + "%";
-      if (label) statusEl.innerHTML = label;
-    }
+    btnLoad.onclick = async () => {
+      btnLoad.disabled = true;
+      addMsg("⏳ Loading DistilGPT2 (~80 MB)...", "bot");
 
-    function setBusy(b) {
-      btnSend.disabled = b || !modelReady;
-      promptEl.disabled = b || !modelReady;
-      btnLoad.disabled = b || modelReady;
-    }
-
-    // Build a simple chat-style prompt
-    function buildPrompt(userText) {
-      const sys = "You are a helpful, concise assistant.";
-      const turns = history.map(h => `${h.role.toUpperCase()}: ${h.text}`).join("\n");
-      return `${sys}\n${turns}${turns ? "\n" : ""}USER: ${userText}\nASSISTANT:`;
-    }
-
-    async function loadModel() {
-      if (modelReady) return;
-      setBusy(true);
-      setProgress(0, "Initializing runtime…");
-
-      // Instantiate Wllama (single-threaded for best compatibility)
-      wllama = new Wllama(WasmFromCDN, {
-        logger: LoggerWithoutDebug,
-        parallelDownloads: 4
+      generator = await pipeline("text-generation", "Xenova/distilgpt2", {
+        progress_callback: (data) => {
+          if (data.loaded && data.total) {
+            setProgress((data.loaded / data.total) * 100);
+          }
+        }
       });
 
-      // Show low-memory hint for tiny devices
-      try { if (navigator.deviceMemory && navigator.deviceMemory < 3) { statusEl.innerHTML = "Warning: low memory device — model may fail"; } } catch(e){}
+      addMsg("✅ Model loaded! You can chat now.", "bot");
+      input.disabled = false; btnSend.disabled = false;
+    };
 
-      let lastPct = 0;
-      const progressCallback = ({ loaded, total, file, cached }) => {
-        const p = total ? (loaded / total) * 100 : lastPct;
-        lastPct = p;
-        const mb = v => (v / 1024 / 1024).toFixed(1);
-        const label = cached
-          ? `Loading from cache (${mb(loaded)} MB)`
-          : total
-            ? `Downloading ${file || "model"} — ${mb(loaded)} / ${mb(total)} MB`
-            : `Downloading…`;
-        setProgress(p, label);
-      };
+    btnSend.onclick = async () => {
+      if (!generator || !input.value.trim()) return;
+      const user = input.value;
+      history.push("User: " + user);
+      addMsg(user, "you");
+      input.value = "";
 
-      try {
-        await wllama.loadModelFromHF(HF_REPO, HF_FILE, {
-          n_threads: 1,           // single-thread ensures widest compatibility on Android and file://
-          progressCallback
-        });
+      addMsg("…thinking…", "bot");
 
-        modelReady = true;
-        setProgress(100, "Model loaded — ready!");
-        addMsg("✅ Model loaded. Ask me anything!");
-        promptEl.disabled = false;
-        btnSend.disabled = false;
-      } catch (err) {
-        console.error("Model load failed:", err);
-        setProgress(0, "Model load failed. See console.");
-        addMsg("❌ Failed to load model. Check console and available storage/network.", "bot");
-      } finally {
-        setBusy(false);
-      }
-    }
+      const prompt = history.join("\n") + "\nAssistant:";
+      const output = await generator(prompt, {
+        max_new_tokens: 60,
+        do_sample: true,
+        top_k: 50,
+        temperature: 0.7
+      });
 
-    async function send() {
-      const text = promptEl.value.trim();
-      if (!text) return;
-      history.push({ role: "user", text });
-      addMsg(text, "me");
-      promptEl.value = "";
-      setBusy(true);
-      const thinkingNode = addMsg("…thinking…", "bot");
-
-      try {
-        setProgress(100, "Generating response…");
-        const prompt = buildPrompt(text);
-        // Keep output short/fast for mobile
-        const out = await wllama.createCompletion(prompt, {
-          nPredict: 160,
-          sampling: { temp: 0.7, top_k: 40, top_p: 0.9 },
-          stopTokens: ["USER:"]
-        });
-        const reply = out.trim().replace(/^ASSISTANT:\s*/i, "") || "(no output)";
-        thinkingNode.textContent = reply;
-        history.push({ role: "assistant", text: reply });
-        statusEl.innerHTML = "Ready";
-      } catch (err) {
-        console.error("Generation error:", err);
-        thinkingNode.textContent = "⚠️ Error generating reply.";
-        statusEl.innerHTML = "Error";
-      } finally {
-        setBusy(false);
-      }
-    }
-
-    // UI wiring
-    document.getElementById("btnLoad").addEventListener("click", loadModel);
-    document.getElementById("btnSend").addEventListener("click", send);
-    document.getElementById("btnClear").addEventListener("click", () => {
-      history.length = 0;
-      chatEl.innerHTML = "";
-      addMsg("🧹 Cleared. Load model and ask anything!");
-    });
-    promptEl.addEventListener("keydown", (e) => {
-      if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
-    });
-
-    // optional: auto attempt to load if not on small mobile user agent (comment out if undesired)
-    // if (!/Android|iPhone|iPad/i.test(navigator.userAgent)) { loadModel(); }
+      const reply = output[0].generated_text.split("Assistant:").pop().trim();
+      history.push("Assistant: " + reply);
+      chatBox.lastChild.textContent = reply;
+    };
   </script>
 </body>
 </html>
